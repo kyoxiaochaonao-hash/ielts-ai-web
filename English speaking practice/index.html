@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>English Speaking Coach</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f9fafb;
+            color: #1f2937;
+        }
+
+        .indigo-accent { color: #6366f1; }
+        .bg-indigo-accent { background-color: #6366f1; }
+        .border-indigo-accent { border-color: #6366f1; }
+
+        .score-circle {
+            transition: stroke-dashoffset 1s ease-out;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .pulse-recording {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-4 md:p-8">
+
+    <!-- Header & API Key -->
+    <header class="w-full max-w-2xl mb-8">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+            <h1 class="text-2xl font-bold flex items-center gap-2">
+                <i data-lucide="mic" class="indigo-accent"></i>
+                SpeakEasy <span class="text-sm font-normal text-gray-500">Coach</span>
+            </h1>
+            <div class="relative w-full md:w-64">
+                <input type="password" id="api-key-input" 
+                    placeholder="Paste Claude API Key..." 
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                <p class="text-[10px] text-gray-400 mt-1">Stored locally in your browser.</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="w-full max-w-2xl flex flex-col gap-6">
+        
+        <!-- Browser Warning -->
+        <div id="browser-warning" class="hidden bg-amber-50 border border-amber-200 p-4 rounded-lg flex items-start gap-3">
+            <i data-lucide="alert-triangle" class="text-amber-500 shrink-0"></i>
+            <p class="text-sm text-amber-800">
+                <strong>Heads up:</strong> Web Speech API works best in Google Chrome. Other browsers might have limited support.
+            </p>
+        </div>
+
+        <!-- Prompt Card -->
+        <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-indigo-500 mb-2">Practice Prompt</span>
+            <h2 id="current-prompt" class="text-xl md:text-2xl font-semibold mb-6">Loading prompt...</h2>
+            
+            <div class="flex gap-4">
+                <button id="next-prompt-btn" class="text-gray-400 hover:text-indigo-500 transition-colors p-2 rounded-full hover:bg-indigo-50">
+                    <i data-lucide="skip-forward"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Recording Area -->
+        <div class="flex flex-col items-center gap-4">
+            <button id="record-btn" class="w-20 h-20 rounded-full bg-indigo-accent text-white flex items-center justify-center shadow-lg transition-all hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                <i id="mic-icon" data-lucide="mic" class="w-8 h-8"></i>
+                <i id="stop-icon" data-lucide="square" class="w-8 h-8 hidden"></i>
+            </button>
+            <p id="status-text" class="text-sm font-medium text-gray-500">Tap to start speaking</p>
+        </div>
+
+        <!-- Real-time Transcript -->
+        <div id="transcript-container" class="hidden w-full bg-indigo-50/50 p-6 rounded-xl border border-indigo-100 min-h-[100px]">
+            <p id="transcript-text" class="text-gray-700 italic text-center"></p>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading-results" class="hidden flex flex-col items-center gap-4 p-8">
+            <div class="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-sm text-gray-500">Claude is analyzing your response...</p>
+        </div>
+
+        <!-- Results Display -->
+        <div id="results-area" class="hidden fade-in flex flex-col gap-6">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <!-- Overall Score -->
+                <div class="bg-white p-4 rounded-xl border border-gray-100 flex flex-col items-center shadow-sm">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase mb-2">Overall</span>
+                    <div class="relative w-16 h-16">
+                        <svg class="w-16 h-16 transform -rotate-90">
+                            <circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="4" fill="transparent" class="text-gray-100"></circle>
+                            <circle id="score-circle-overall" cx="32" cy="32" r="28" stroke="currentColor" stroke-width="4" fill="transparent" 
+                                stroke-dasharray="175.9" stroke-dashoffset="175.9" class="text-indigo-500 score-circle"></circle>
+                        </svg>
+                        <span id="score-text-overall" class="absolute inset-0 flex items-center justify-center font-bold text-lg">0</span>
+                    </div>
+                </div>
+                <!-- Fluency -->
+                <div class="bg-white p-4 rounded-xl border border-gray-100 flex flex-col items-center shadow-sm">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase mb-2">Fluency</span>
+                    <div class="relative w-16 h-16">
+                        <svg class="w-16 h-16 transform -rotate-90">
+                            <circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="4" fill="transparent" class="text-gray-100"></circle>
+                            <circle id="score-circle-fluency" cx="32" cy="32" r="28" stroke="currentColor" stroke-width="4" fill="transparent" 
+                                stroke-dasharray="175.9" stroke-dashoffset="175.9" class="text-emerald-500 score-circle"></circle>
+                        </svg>
+                        <span id="score-text-fluency" class="absolute inset-0 flex items-center justify-center font-bold text-lg">0</span>
+                    </div>
+                </div>
+                <!-- Vocabulary -->
+                <div class="bg-white p-4 rounded-xl border border-gray-100 flex flex-col items-center shadow-sm">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase mb-2">Vocab</span>
+                    <div class="relative w-16 h-16">
+                        <svg class="w-16 h-16 transform -rotate-90">
+                            <circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="4" fill="transparent" class="text-gray-100"></circle>
+                            <circle id="score-circle-vocabulary" cx="32" cy="32" r="28" stroke="currentColor" stroke-width="4" fill="transparent" 
+                                stroke-dasharray="175.9" stroke-dashoffset="175.9" class="text-blue-500 score-circle"></circle>
+                        </svg>
+                        <span id="score-text-vocabulary" class="absolute inset-0 flex items-center justify-center font-bold text-lg">0</span>
+                    </div>
+                </div>
+                <!-- Grammar -->
+                <div class="bg-white p-4 rounded-xl border border-gray-100 flex flex-col items-center shadow-sm">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase mb-2">Grammar</span>
+                    <div class="relative w-16 h-16">
+                        <svg class="w-16 h-16 transform -rotate-90">
+                            <circle cx="32" cy="32" r="28" stroke="currentColor" stroke-width="4" fill="transparent" class="text-gray-100"></circle>
+                            <circle id="score-circle-grammar" cx="32" cy="32" r="28" stroke="currentColor" stroke-width="4" fill="transparent" 
+                                stroke-dasharray="175.9" stroke-dashoffset="175.9" class="text-amber-500 score-circle"></circle>
+                        </svg>
+                        <span id="score-text-grammar" class="absolute inset-0 flex items-center justify-center font-bold text-lg">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feedback -->
+            <div class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                <h3 class="font-bold mb-3 flex items-center gap-2">
+                    <i data-lucide="sparkles" class="text-indigo-500 w-5 h-5"></i>
+                    Coach Feedback
+                </h3>
+                <p id="feedback-text" class="text-gray-600 leading-relaxed italic"></p>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="mt-auto py-8 text-center text-gray-400 text-sm">
+        <p>&copy; 2024 SpeakEasy Coach. Powered by Anthropic Claude.</p>
+    </footer>
+
+    <script>
+        // --- State & Config ---
+        const initialPrompts = [
+            "What is your favorite way to spend a weekend, and why?",
+            "If you could travel anywhere in the world right now, where would you go?",
+            "What are the most important qualities of a good friend?"
+        ];
+        let currentPromptIndex = 0;
+        let isRecording = false;
+        let recognition = null;
+        let finalTranscript = '';
+
+        // --- Selectors ---
+        const apiKeyInput = document.getElementById('api-key-input');
+        const promptText = document.getElementById('current-prompt');
+        const nextPromptBtn = document.getElementById('next-prompt-btn');
+        const recordBtn = document.getElementById('record-btn');
+        const micIcon = document.getElementById('mic-icon');
+        const stopIcon = document.getElementById('stop-icon');
+        const statusText = document.getElementById('status-text');
+        const transcriptContainer = document.getElementById('transcript-container');
+        const transcriptText = document.getElementById('transcript-text');
+        const loadingResults = document.getElementById('loading-results');
+        const resultsArea = document.getElementById('results-area');
+        const browserWarning = document.getElementById('browser-warning');
+
+        // --- Initialization ---
+        function init() {
+            lucide.createIcons();
+            
+            // Load saved API Key
+            const savedKey = localStorage.getItem('claude_api_key');
+            if (savedKey) apiKeyInput.value = savedKey;
+
+            apiKeyInput.addEventListener('change', (e) => {
+                localStorage.setItem('claude_api_key', e.target.value);
+            });
+
+            // Set initial prompt
+            promptText.textContent = initialPrompts[0];
+
+            // Check browser support
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                browserWarning.classList.remove('hidden');
+                recordBtn.disabled = true;
+                statusText.textContent = "Speech recognition not supported in this browser.";
+            } else {
+                setupSpeechRecognition();
+            }
+        }
+
+        function setupSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = () => {
+                isRecording = true;
+                recordBtn.classList.add('pulse-recording');
+                micIcon.classList.add('hidden');
+                stopIcon.classList.remove('hidden');
+                statusText.textContent = "Listening...";
+                transcriptContainer.classList.remove('hidden');
+                transcriptText.textContent = ''; // Clear previous transcript
+                resultsArea.classList.add('hidden');
+                finalTranscript = '';
+            };
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+                transcriptText.textContent = finalTranscript + interimTranscript;
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                stopRecording();
+                alert(`Speech recognition error: ${event.error}`);
+            };
+
+            recognition.onend = () => {
+                if (isRecording) {
+                    // This can happen if the API stops automatically
+                    stopRecording();
+                }
+            };
+        }
+
+        // --- Actions ---
+        function toggleRecording() {
+            if (isRecording) {
+                stopRecording();
+                analyzeSpeech();
+            } else {
+                startRecording();
+            }
+        }
+
+        function startRecording() {
+            if (!recognition) return;
+            try {
+                recognition.start();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function stopRecording() {
+            if (!recognition) return;
+            isRecording = false;
+            recognition.stop();
+            recordBtn.classList.remove('pulse-recording');
+            micIcon.classList.remove('hidden');
+            stopIcon.classList.add('hidden');
+            statusText.textContent = "Tap to start speaking";
+        }
+
+        async function analyzeSpeech() {
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                alert("Please enter your Anthropic API Key first.");
+                return;
+            }
+
+            if (!finalTranscript.trim()) {
+                alert("I didn't catch that. Please try speaking again.");
+                return;
+            }
+
+            loadingResults.classList.remove('hidden');
+            
+            const systemPrompt = `You are an English speaking coach. The user just spoke an answer to a question. You will receive their transcript. 
+Analyze their response and return a JSON object with exactly these fields: 
+- "score": a number 1-10 for overall spoken English quality 
+- "fluency": a number 1-10 
+- "vocabulary": a number 1-10  
+- "grammar": a number 1-10 
+- "feedback": 2-3 sentences of encouraging, specific feedback on what they did well and what to improve 
+- "next_question": a new English speaking practice question related to their topic 
+Return only valid JSON, no markdown, no extra text.`;
+
+            const transcript = `System: ${systemPrompt}\n\nUser Question: ${promptText.textContent}\nUser Answer Transcript: ${finalTranscript}`;
+
+            try {
+                const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${apiKey}`
+  },
+  body: JSON.stringify({
+    model: "deepseek-chat",
+    max_tokens: 1024,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: transcript }
+    ]
+  })
+});
+```
+
+**第四步：再搜索结果解析部分**
+
+搜索：
+```
+data.content[0].text
+```
+把它替换成：
+```
+data.choices[0].message.content
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || "Failed to get response from Claude.");
+                }
+
+                const data = await response.json();
+                let content = data.content[0].text;
+                
+                // Strip potential markdown code blocks if Claude ignores the "no markdown" instruction
+                content = content.replace(/```json\n?|\n?```/g, '').trim();
+                
+                const result = JSON.parse(content);
+                displayResults(result);
+            } catch (error) {
+                console.error("API Error:", error);
+                alert(`Error: ${error.message}`);
+            } finally {
+                loadingResults.classList.add('hidden');
+            }
+        }
+
+        function displayResults(data) {
+            resultsArea.classList.remove('hidden');
+            
+            // Reset circles first for re-animation
+            ['overall', 'fluency', 'vocabulary', 'grammar'].forEach(id => {
+                const circle = document.getElementById(`score-circle-${id}`);
+                circle.style.strokeDashoffset = '175.9';
+            });
+
+            // Small timeout to allow the transition to trigger
+            setTimeout(() => {
+                updateScoreCircle('overall', data.score);
+                updateScoreCircle('fluency', data.fluency);
+                updateScoreCircle('vocabulary', data.vocabulary);
+                updateScoreCircle('grammar', data.grammar);
+            }, 50);
+
+            // Update feedback
+            document.getElementById('feedback-text').textContent = data.feedback;
+
+            // Update next prompt
+            if (data.next_question) {
+                setTimeout(() => {
+                    promptText.textContent = data.next_question;
+                    // Add a small fade-in effect to the prompt
+                    promptText.classList.remove('fade-in');
+                    void promptText.offsetWidth; // Trigger reflow
+                    promptText.classList.add('fade-in');
+                }, 5000); // 5 seconds to read feedback
+            }
+        }
+
+        function updateScoreCircle(id, score) {
+            const circle = document.getElementById(`score-circle-${id}`);
+            const text = document.getElementById(`score-text-${id}`);
+            
+            // 175.9 is the circumference for r=28
+            const offset = 175.9 - (score / 10) * 175.9;
+            circle.style.strokeDashoffset = offset;
+            text.textContent = score;
+        }
+
+        function nextPrompt() {
+            currentPromptIndex = (currentPromptIndex + 1) % initialPrompts.length;
+            promptText.textContent = initialPrompts[currentPromptIndex];
+            resultsArea.classList.add('hidden');
+            transcriptContainer.classList.add('hidden');
+            transcriptText.textContent = '';
+        }
+
+        // --- Event Listeners ---
+        recordBtn.addEventListener('click', toggleRecording);
+        nextPromptBtn.addEventListener('click', nextPrompt);
+
+        // Run Init
+        init();
+
+    </script>
+</body>
+</html>
